@@ -45,16 +45,20 @@ extension PendingPreKey: ProtocolBufferEquivalent {
      - throws: `SignalError` error of type `invalidProtoBuf`, if data is missing or corrupt
      */
     init(from protoObject: Signal_Session.PendingPreKey) throws {
-        guard protoObject.hasBaseKey, protoObject.hasSignedPreKeyID else {
+        guard protoObject.hasBaseKey else {
             throw SignalError(.invalidProtoBuf, "Missing data in object")
         }
         if protoObject.hasPreKeyID {
             self.preKeyId = protoObject.preKeyID
         }
-        if protoObject.signedPreKeyID < 0 {
+        if protoObject.hasSignedPreKeyID {
+            if protoObject.signedPreKeyID < 0 {
             throw SignalError(.invalidProtoBuf, "Invalid SignedPreKey id \(protoObject.signedPreKeyID)")
         }
         self.signedPreKeyId = UInt32(protoObject.signedPreKeyID)
+        } else {
+            self.signedPreKeyId = 0
+        }
         self.baseKey = try PublicKey(from: protoObject.baseKey)
     }
 }

@@ -621,14 +621,14 @@ fileprivate let _protobuf_package = "Signal"
 extension Signal_Session: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   static let protoMessageName: String = _protobuf_package + ".Session"
   static let _protobuf_nameMap: SwiftProtobuf._NameMap = [
-    1: .same(proto: "localIdentityPublic"),
-    2: .same(proto: "remoteIdentityPublic"),
-    3: .same(proto: "rootKey"),
-    4: .same(proto: "previousCounter"),
-    5: .same(proto: "senderChain"),
-    6: .same(proto: "receiverChains"),
-    7: .same(proto: "pendingPreKey"),
-    8: .same(proto: "aliceBaseKey"),
+    2: .same(proto: "localIdentityPublic"),
+    3: .same(proto: "remoteIdentityPublic"),
+    4: .same(proto: "rootKey"),
+    5: .same(proto: "previousCounter"),
+    6: .same(proto: "senderChain"),
+    7: .same(proto: "receiverChains"),
+    9: .same(proto: "pendingPreKey"),
+    13: .same(proto: "aliceBaseKey"),
   ]
 
   fileprivate class _StorageClass {
@@ -669,14 +669,14 @@ extension Signal_Session: SwiftProtobuf.Message, SwiftProtobuf._MessageImplement
     try withExtendedLifetime(_storage) { (_storage: _StorageClass) in
       while let fieldNumber = try decoder.nextFieldNumber() {
         switch fieldNumber {
-        case 1: try decoder.decodeSingularBytesField(value: &_storage._localIdentityPublic)
-        case 2: try decoder.decodeSingularBytesField(value: &_storage._remoteIdentityPublic)
-        case 3: try decoder.decodeSingularBytesField(value: &_storage._rootKey)
-        case 4: try decoder.decodeSingularUInt32Field(value: &_storage._previousCounter)
-        case 5: try decoder.decodeSingularMessageField(value: &_storage._senderChain)
-        case 6: try decoder.decodeRepeatedMessageField(value: &_storage._receiverChains)
-        case 7: try decoder.decodeSingularMessageField(value: &_storage._pendingPreKey)
-        case 8: try decoder.decodeSingularBytesField(value: &_storage._aliceBaseKey)
+        case 2: try decoder.decodeSingularBytesField(value: &_storage._localIdentityPublic)
+        case 3: try decoder.decodeSingularBytesField(value: &_storage._remoteIdentityPublic)
+        case 4: try decoder.decodeSingularBytesField(value: &_storage._rootKey)
+        case 5: try decoder.decodeSingularUInt32Field(value: &_storage._previousCounter)
+        case 6: try decoder.decodeSingularMessageField(value: &_storage._senderChain)
+        case 7: try decoder.decodeRepeatedMessageField(value: &_storage._receiverChains)
+        case 9: try decoder.decodeSingularMessageField(value: &_storage._pendingPreKey)
+        case 13: try decoder.decodeSingularBytesField(value: &_storage._aliceBaseKey)
         default: break
         }
       }
@@ -686,28 +686,28 @@ extension Signal_Session: SwiftProtobuf.Message, SwiftProtobuf._MessageImplement
   func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
     try withExtendedLifetime(_storage) { (_storage: _StorageClass) in
       if let v = _storage._localIdentityPublic {
-        try visitor.visitSingularBytesField(value: v, fieldNumber: 1)
-      }
-      if let v = _storage._remoteIdentityPublic {
         try visitor.visitSingularBytesField(value: v, fieldNumber: 2)
       }
-      if let v = _storage._rootKey {
+      if let v = _storage._remoteIdentityPublic {
         try visitor.visitSingularBytesField(value: v, fieldNumber: 3)
       }
+      if let v = _storage._rootKey {
+        try visitor.visitSingularBytesField(value: v, fieldNumber: 4)
+      }
       if let v = _storage._previousCounter {
-        try visitor.visitSingularUInt32Field(value: v, fieldNumber: 4)
+        try visitor.visitSingularUInt32Field(value: v, fieldNumber: 5)
       }
       if let v = _storage._senderChain {
-        try visitor.visitSingularMessageField(value: v, fieldNumber: 5)
+        try visitor.visitSingularMessageField(value: v, fieldNumber: 6)
       }
       if !_storage._receiverChains.isEmpty {
-        try visitor.visitRepeatedMessageField(value: _storage._receiverChains, fieldNumber: 6)
+        try visitor.visitRepeatedMessageField(value: _storage._receiverChains, fieldNumber: 7)
       }
       if let v = _storage._pendingPreKey {
-        try visitor.visitSingularMessageField(value: v, fieldNumber: 7)
+        try visitor.visitSingularMessageField(value: v, fieldNumber: 9)
       }
       if let v = _storage._aliceBaseKey {
-        try visitor.visitSingularBytesField(value: v, fieldNumber: 8)
+        try visitor.visitSingularBytesField(value: v, fieldNumber: 13)
       }
     }
     try unknownFields.traverse(visitor: &visitor)

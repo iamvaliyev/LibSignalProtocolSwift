@@ -31,6 +31,12 @@ public struct SignalMessage {
     /// The mac of the message
     var mac: Data
 
+    /// The original raw protobuf bytes (before MAC) for MAC verification
+    var originalRawData: Data?
+
+    /// The version byte from the serialized message
+    var versionByte: UInt8?
+
     /**
      Create a SignalMessage from its components.
      - parameter macKey: The key used to calculate the message authentication
@@ -99,21 +105,30 @@ public struct SignalMessage {
                    receiverIdentityKey: PublicKey,
                    macKey: Data) throws -> Bool {
 
-        let data = try self.protoData()
-        let length = data.count - SignalMessage.macLength
-        let content = data[0..<length]
+        // Use originalRawData if available (preserves exact bytes from sender)
+        let messageForMac: Data
+        if let raw = originalRawData {
+            if let vb = versionByte {
+                messageForMac = Data([vb]) + raw
+            } else {
+                messageForMac = raw
+            }
+        } else {
+            messageForMac = try self.protoData()
+        }
 
         let ourMac = try getMac(
             senderIdentityKey: senderIdentityKey,
             receiverIdentityKey: receiverIdentityKey,
             macKey: macKey,
-            message: content)
+            message: messageForMac)
 
         guard ourMac.count == SignalMessage.macLength else {
             throw SignalError(.hmacError, "MAC length mismatch: \(mac.count) != \(SignalMessage.macLength)")
         }
         return ourMac == mac
     }
+
 
     /**
      Return the serialized version of the message.
@@ -196,7 +211,8 @@ extension SignalMessage: ProtocolBufferSerializable {
             throw SignalError(.invalidProtoBuf, "Could not create SignalMessage ProtoBuf object: \(error)")
         }
         try self.init(from: protoObject)
-        self.mac = data.advanced(by: length)
+        self.originalRawData = Data(newData)
+        self.mac = Data(data.suffix(SignalMessage.macLength))
     }
 }
 

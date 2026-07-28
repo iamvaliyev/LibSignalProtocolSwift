@@ -110,13 +110,17 @@ public struct SessionCipher<Context: KeyStore> {
      - `noSession` if there is no established session for this contact.
      - `invalidType` if the type of the message is not supported
     */
+    /// Version byte passed from the caller (e.g. NotificationService)
+    public var externalVersionByte: UInt8?
+
     public func decrypt(_ message: CipherTextMessage) throws -> Data {
         switch message.type {
         case .preKey:
             let mess = try PreKeySignalMessage(from: message.data)
             return try decrypt(preKeySignalMessage: mess)
         case .signal:
-            let mess = try SignalMessage(from: message.data)
+            var mess = try SignalMessage(from: message.data)
+            mess.versionByte = externalVersionByte
             return try decrypt(signalMessage: mess)
         default:
             throw SignalError(.invalidType, "Not a PreKeySignalMessage or SignalMessage")
@@ -200,11 +204,12 @@ public struct SessionCipher<Context: KeyStore> {
      - throws: Errors of type `SignalError`
     */
     private func decrypt(from record: SessionRecord, and signalMessage: SignalMessage) throws -> Data {
+        var innerErrors = [String]()
 
         do {
             return try decrypt(from: record.state, and: signalMessage)
-        } catch let error as SignalError where error.type == .invalidMessage {
-            // Invalid message means that the current state is not the right one
+        } catch {
+            innerErrors.append("active: \(error)")
         }
 
         for index in 0..<record.previousStates.count {
@@ -213,11 +218,11 @@ public struct SessionCipher<Context: KeyStore> {
                 let plaintext = try decrypt(from: state, and: signalMessage)
                 record.promoteState(state: state)
                 return plaintext
-            } catch let error as SignalError where error.type == .invalidMessage {
-                // Invalid message means that the current state is not the right one
+            } catch {
+                innerErrors.append("prev[\(index)]: \(error)")
             }
         }
-        throw SignalError(.invalidMessage, "No valid sessions")
+        throw SignalError(.invalidMessage, "No valid sessions. Inner errors: \(innerErrors.joined(separator: ", "))")
     }
 
     /**
@@ -361,7 +366,7 @@ public struct SessionCipher<Context: KeyStore> {
     private func getCiphertext(messageKeys: RatchetMessageKeys, plaintext: Data) throws -> Data {
         return try SignalCrypto.encrypt(
             message: plaintext,
-            with: .AES_CTRnoPadding,
+            with: .AES_CBCwithPKCS5,
             key: messageKeys.cipherKey,
             iv: messageKeys.iv)
     }
@@ -376,7 +381,7 @@ public struct SessionCipher<Context: KeyStore> {
     private func getPlaintext(messageKeys: RatchetMessageKeys, ciphertext: Data) throws -> Data {
         return try SignalCrypto.decrypt(
             message: ciphertext,
-            with: .AES_CTRnoPadding,
+            with: .AES_CBCwithPKCS5,
             key: messageKeys.cipherKey,
             iv: messageKeys.iv)
     }

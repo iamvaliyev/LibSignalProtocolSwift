@@ -103,10 +103,10 @@ extension RatchetChainKey: ProtocolBufferEquivalent {
      - throws: `SignalError` of type `invalidProtoBuf`, if data is missing or corrupt
      */
     init(from protoObject: Signal_Session.Chain.ChainKey) throws {
-        guard protoObject.hasIndex, protoObject.hasKey else {
-            throw SignalError(.invalidProtoBuf, "Missing data in RatchetChainKey protobuf object")
+        guard protoObject.hasKey else {
+            throw SignalError(.invalidProtoBuf, "Missing key in RatchetChainKey protobuf object")
         }
-        self.index = protoObject.index
+        self.index = protoObject.hasIndex ? protoObject.index : 0
         self.key = protoObject.key
     }
 }

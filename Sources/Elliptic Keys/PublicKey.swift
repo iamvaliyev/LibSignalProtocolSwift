@@ -28,8 +28,13 @@ public struct PublicKey {
      - throws: `SignalError` of type `invalidProtoBuf`
      */
     init(point: Data) throws {
+        if point.count == 33 && point.first == 5 {
+            self.key = Data(point.dropFirst())
+            return
+        }
         guard point.count == Curve25519.keyLength else {
-            throw SignalError(.invalidProtoBuf, "Invalid key length \(point.count)")
+            let hex = point.map { String(format: "%02hhx", $0) }.joined()
+            throw SignalError(.invalidProtoBuf, "Invalid key length \(point.count): \(hex)")
         }
         self.key = point
     }
@@ -117,7 +122,9 @@ extension PublicKey: Comparable {
 
     /// The serialized data of the public key
     public var data: Data {
-        return key
+        var full = Data([5])
+        full.append(key)
+        return full
     }
 }
 
