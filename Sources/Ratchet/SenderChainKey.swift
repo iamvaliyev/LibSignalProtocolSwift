@@ -43,7 +43,10 @@ struct SenderChainKey {
     mutating func messageKey() throws -> SenderMessageKey {
         let derivative = try SignalCrypto.hmacSHA256(for: SenderChainKey.messageKeySeed, with: chainKey)
         let messageKey = try SenderMessageKey(iteration: iteration, seed: derivative)
-        chainKey = Data(derivative)
+        
+        let nextChainKey = try SignalCrypto.hmacSHA256(for: SenderChainKey.chainKeySeed, with: chainKey)
+        chainKey = Data(nextChainKey)
+        
         iteration += 1
         return messageKey
     }
