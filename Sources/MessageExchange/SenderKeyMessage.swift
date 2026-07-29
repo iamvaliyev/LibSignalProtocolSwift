@@ -36,6 +36,9 @@ public struct SenderKeyMessage {
     /// The signature of the message
     var signature: Data
     
+    /// The exact protobuf data from the parsed message (to avoid re-serialization differences)
+    var serializedProtobuf: Data?
+    
     /// The version byte from the Dart-serialized message (if present)
     var versionByte: UInt8?
 
@@ -59,6 +62,7 @@ public struct SenderKeyMessage {
         self.iteration = iteration
         self.cipherText = cipherText
         self.versionByte = nil
+        self.serializedProtobuf = nil
         // Empty signature for serialization
         self.signature = Data()
         let data = try self.protoData()
@@ -80,11 +84,16 @@ public struct SenderKeyMessage {
         }
         
         // Get just the protobuf data (without signature)
+        // Prefer exactly what we parsed (if available) to avoid non-deterministic serialization issues
         let protobufData: Data
-        do {
-            protobufData = try protoObject.serializedData()
-        } catch {
-            throw SignalError(.invalidProtoBuf, "Could not serialize for verification: \(error)")
+        if let originalProtobuf = self.serializedProtobuf {
+            protobufData = originalProtobuf
+        } else {
+            do {
+                protobufData = try protoObject.serializedData()
+            } catch {
+                throw SignalError(.invalidProtoBuf, "Could not serialize for verification: \(error)")
+            }
         }
         
         // If we have a version byte (Dart format), verify over [version + protobuf]
@@ -126,6 +135,7 @@ extension SenderKeyMessage: ProtocolBufferEquivalent {
         self.cipherText = object.ciphertext
         self.signature = Data()
         self.versionByte = nil
+        self.serializedProtobuf = nil
     }
 
 }
@@ -167,7 +177,7 @@ extension SenderKeyMessage: ProtocolBufferSerializable {
             let withoutVersion = data[(data.startIndex + 1)...]
             let protobufLength = withoutVersion.count - Curve25519.signatureLength
             if protobufLength > 0 {
-                let protobufData = withoutVersion[withoutVersion.startIndex..<(withoutVersion.startIndex + protobufLength)]
+                let protobufData = Data(withoutVersion[withoutVersion.startIndex..<(withoutVersion.startIndex + protobufLength)])
                 let signatureData = Data(withoutVersion[(withoutVersion.startIndex + protobufLength)...])
                 
                 if let object = try? Signal_SenderKeyMessage(serializedData: protobufData),
@@ -175,6 +185,7 @@ extension SenderKeyMessage: ProtocolBufferSerializable {
                     try self.init(from: object)
                     self.signature = signatureData
                     self.versionByte = firstByte
+                    self.serializedProtobuf = protobufData
                     return
                 }
             }
@@ -185,7 +196,7 @@ extension SenderKeyMessage: ProtocolBufferSerializable {
         guard length > 1 else {
             throw SignalError(.invalidProtoBuf, "Too few bytes in data for SenderKeyMessage")
         }
-        let content = data[data.startIndex..<(data.startIndex + length)]
+        let content = Data(data[data.startIndex..<(data.startIndex + length)])
         let signature = Data(data[(data.startIndex + length)...])
         let object: Signal_SenderKeyMessage
         do {
@@ -196,5 +207,6 @@ extension SenderKeyMessage: ProtocolBufferSerializable {
         try self.init(from: object)
         self.signature = signature
         self.versionByte = nil
+        self.serializedProtobuf = content
     }
 }
