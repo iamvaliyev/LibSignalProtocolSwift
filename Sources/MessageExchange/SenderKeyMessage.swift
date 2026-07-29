@@ -11,6 +11,16 @@ import Curve25519
 
 /**
  A sender key message is used to send an encrypted message in an existing group session.
+ 
+ Dart (libsignal_protocol_dart) serializes SenderKeyMessages as:
+   [1 version byte] + [protobuf bytes] + [64 signature bytes]
+ and signs over [version_byte + protobuf].
+ 
+ The original Swift library serializes as:
+   [protobuf bytes] + [64 signature bytes]
+ and verifies over [protobuf] only.
+ 
+ This version is patched to be compatible with the Dart format.
  */
 public struct SenderKeyMessage {
 
@@ -25,6 +35,9 @@ public struct SenderKeyMessage {
 
     /// The signature of the message
     var signature: Data
+    
+    /// The version byte from the Dart-serialized message (if present)
+    var versionByte: UInt8?
 
     /**
      Return the message serialized 
@@ -35,11 +48,6 @@ public struct SenderKeyMessage {
 
     /**
      Create a `SenderKeyMessage` from the components.
-     - note: The possible error types are:
-     `invalidProtoBuf`, if the ProtoBuf object can't be serialized for the signature.
-     `invalidLength`, if the message is more than 256 or 0 byte.
-     `invalidSignature`, if the message could not be signed.
-     `noRandomBytes`, if the crypto provider could not provide random bytes for the signature.
      - parameter keyId: The id of the key that was used
      - parameter iteration: The iteration of the chain key
      - parameter cipherText: The encrypted ciphertext
@@ -50,6 +58,7 @@ public struct SenderKeyMessage {
         self.keyId = keyId
         self.iteration = iteration
         self.cipherText = cipherText
+        self.versionByte = nil
         // Empty signature for serialization
         self.signature = Data()
         let data = try self.protoData()
@@ -58,20 +67,36 @@ public struct SenderKeyMessage {
 
     /**
      Verify that the signature matches the message.
-     - note: The possible error types are:
-
+     Supports both Dart format (version byte included in signed content)
+     and legacy Swift format (no version byte).
+     
      - parameter signatureKey: The key used to verify the message
      - returns: `True`, if the signature matches
-     - throws: `SignalError` of type `invalidProtoBuf`, if the ProtoBuf object can't be serialized for the signature.
+     - throws: `SignalError` of type `invalidProtoBuf`
     */
     func verify(signatureKey: PublicKey) throws -> Bool {
         guard signature.count == Curve25519.signatureLength else {
             return false
         }
-        let record = try self.protoData()
-        let length = record.count - Curve25519.signatureLength
-        let message = record[0..<length]
-        return signatureKey.verify(signature: signature, for: message)
+        
+        // Get just the protobuf data (without signature)
+        let protobufData: Data
+        do {
+            protobufData = try protoObject.serializedData()
+        } catch {
+            throw SignalError(.invalidProtoBuf, "Could not serialize for verification: \(error)")
+        }
+        
+        // If we have a version byte (Dart format), verify over [version + protobuf]
+        if let vByte = versionByte {
+            let signedContent = Data([vByte]) + protobufData
+            if signatureKey.verify(signature: signature, for: signedContent) {
+                return true
+            }
+        }
+        
+        // Fallback: try legacy Swift format (verify over protobuf only)
+        return signatureKey.verify(signature: signature, for: protobufData)
     }
 }
 
@@ -89,8 +114,6 @@ extension SenderKeyMessage: ProtocolBufferEquivalent {
 
     /**
      Create a sender key message from a ProtoBuf object.
-     - note: The types of errors thrown are:
-     `invalidProtoBuf`, if data is missing or corrupt
      - parameter object: The ProtoBuf object
      - throws: `SignalError` errors
      */
@@ -102,6 +125,7 @@ extension SenderKeyMessage: ProtocolBufferEquivalent {
         self.iteration = object.iteration
         self.cipherText = object.ciphertext
         self.signature = Data()
+        self.versionByte = nil
     }
 
 }
@@ -123,9 +147,9 @@ extension SenderKeyMessage: ProtocolBufferSerializable {
 
     /**
      Create a sender key message from serialized data.
-     - note: The types of errors thrown are:
-     `invalidProtoBuf`, if data is missing or corrupt
-     `invalidSignature`, if the signature length is incorrect
+     Supports both Dart format: [version_byte][protobuf][signature]
+     and legacy Swift format: [protobuf][signature]
+     
      - parameter data: The serialized data
      - throws: `SignalError` errors
      */
@@ -133,12 +157,36 @@ extension SenderKeyMessage: ProtocolBufferSerializable {
         guard data.count > Curve25519.signatureLength else {
             throw SignalError(.invalidProtoBuf, "Too few bytes in data for SenderKeyMessage")
         }
+        
+        // Try Dart format first: [1 version byte] + [protobuf] + [64 signature bytes]
+        // Dart version byte encodes high nibble = 3 (currentVersion)
+        let firstByte = data[data.startIndex]
+        let highBits = Int(firstByte) >> 4
+        
+        if highBits == 3 && data.count > 1 + Curve25519.signatureLength {
+            let withoutVersion = data[(data.startIndex + 1)...]
+            let protobufLength = withoutVersion.count - Curve25519.signatureLength
+            if protobufLength > 0 {
+                let protobufData = withoutVersion[withoutVersion.startIndex..<(withoutVersion.startIndex + protobufLength)]
+                let signatureData = Data(withoutVersion[(withoutVersion.startIndex + protobufLength)...])
+                
+                if let object = try? Signal_SenderKeyMessage(serializedData: protobufData),
+                   object.hasID, object.hasIteration, object.hasCiphertext {
+                    try self.init(from: object)
+                    self.signature = signatureData
+                    self.versionByte = firstByte
+                    return
+                }
+            }
+        }
+        
+        // Fallback: legacy Swift format [protobuf][signature]
         let length = data.count - Curve25519.signatureLength
         guard length > 1 else {
             throw SignalError(.invalidProtoBuf, "Too few bytes in data for SenderKeyMessage")
         }
-        let content = data[0..<length]
-        let signature = data[length...]
+        let content = data[data.startIndex..<(data.startIndex + length)]
+        let signature = Data(data[(data.startIndex + length)...])
         let object: Signal_SenderKeyMessage
         do {
             object = try Signal_SenderKeyMessage(serializedData: content)
@@ -147,5 +195,6 @@ extension SenderKeyMessage: ProtocolBufferSerializable {
         }
         try self.init(from: object)
         self.signature = signature
+        self.versionByte = nil
     }
 }
